@@ -38,7 +38,7 @@ For the methylation correlation analysis, we would like to determine if the meth
 
 Similarly, we examine the unmethylation correlation: the number of times j is unmethylated given that i is unmethylated, divided by the total number of times locus j is unmethylated. This is
 
-*U<sub>i,j</sub> / (U<sub>i,j</sub>+Y<sub>i,j</sub>) *
+*U<sub>i,j</sub> / (U<sub>i,j</sub>+Y<sub>i,j</sub>)*
 
 
 # Comethylation Observed and Expected #
