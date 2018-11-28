@@ -50,7 +50,7 @@ In this case, the observed is
 
 The expected is
 
-*E<sub>i,j</sub>=((a<sub>i</sub>&ast;a<sub>j</sub>)+((1-a<sub>i</sub>)&ast;(1-a<sub>j</sub>)))&ast;T<sub>i,j</sub>*
+*E<sub>i,j</sub>=(a<sub>i</sub>&ast;a<sub>j</sub>)+((1-a<sub>i</sub>)&ast;(1-a<sub>j</sub>))*
 
 # Correlation Plots #
 *methylKitAnalysis.txt* - R script for creating the correlation plots 
