@@ -186,7 +186,7 @@ then
         dedup) dedup=1 ;;
         early) earlyexit=1 ;;
         final) final=1 ;;
-	    postproc) postproc=1 ;; 
+	      postproc) postproc=1 ;; 
         *)  echo "$usageHelp"
 	    echo "$stageHelp"
 	    exit 1
@@ -215,15 +215,19 @@ else
     fi
 fi
 
-## Check that refSeq exists 
-if [ ! -e "$refSeq" ]; then
-    echo "***! Reference sequence $refSeq does not exist";
-    exit 1;
-fi
-## Check that index for refSeq exists
-if [ ! -e "${refSeq}.bwt" ]; then
-    echo "***! Reference sequence $refSeq does not appear to have been indexed. Please run bwa index on this file before running JuiceMe.";
-    exit 1;
+if [[ -z "$merge" && -z "$final" && -z "$dedup" && -z "$postproc" ]]
+then
+    ## Check that refSeq exists 
+    if [ ! -e "$refSeq" ]; then
+        echo "***! Reference sequence $refSeq does not exist";
+        exit 1;
+    fi
+
+    ## Check that index for refSeq exists
+    if [ ! -e "${refSeq}.bwt" ]; then
+        echo "***! Reference sequence $refSeq does not appear to have been indexed. Please run bwa index on this file before running JuiceMe.";
+        exit 1;
+    fi
 fi
 
 ## Set ligation junction based on restriction enzyme
@@ -234,6 +238,10 @@ then
         DpnII) ligation="GATCGATC";;
         MboI) ligation="GATCGATC";;
         NcoI) ligation="CCATGCATGG";;
+        MseI) ligation="TTATAA";;
+        MboI+MseI) ligation="(GATCGATC|TTATAA)";;
+        Csp6I+MseI) ligation="(GTATAC|TTATAA|GTATAA|TTATAC)";;
+        Csp6I) ligation="GTATAC";;
         none) ligation="XXXX";;
         *)  ligation="XXXX"
 	    echo "$site not listed as recognized enzyme. Using $site_file as site file"
@@ -278,22 +286,25 @@ outputdir=${topDir}"/aligned"
 tmpdir=${topDir}"/HIC_tmp"
 debugdir=${topDir}"/debug"
 
-## Check that fastq directory exists and has proper fastq files
-if [ ! -d "$topDir/fastq" ]; then
-    echo "Directory \"$topDir/fastq\" does not exist."
-    echo "Create \"$topDir/$fastq\" and put fastq files to be aligned there."
-    echo "Type \"juiceme.sh -h\" for help"
-    exit 1
-else 
-    if stat -t ${fastqdir} >/dev/null 2>&1
-    then
-	   echo "(-: Looking for fastq files...fastq files exist"
-    else
-	   if [ ! -d "$splitdir" ]; then 
-	        echo "***! Failed to find any files matching ${fastqdir}"
-	       echo "***! Type \"juiceme.sh -h \" for help"
-	       exit 1		
-	   fi
+if [[ -z "$merge" && -z "$final" && -z "$dedup" && -z "$postproc" ]]
+then 
+    ## Check that fastq directory exists and has proper fastq files
+    if [ ! -d "$topDir/fastq" ]; then
+        echo "Directory \"$topDir/fastq\" does not exist."
+        echo "Create \"$topDir/$fastq\" and put fastq files to be aligned there."
+        echo "Type \"juiceme.sh -h\" for help"
+        exit 1
+    else 
+        if stat -t ${fastqdir} >/dev/null 2>&1
+        then
+	          echo "(-: Looking for fastq files...fastq files exist"
+        else
+	          if [ ! -d "$splitdir" ]; then 
+	              echo "***! Failed to find any files matching ${fastqdir}"
+	              echo "***! Type \"juiceme.sh -h \" for help"
+	              exit 1		
+	          fi
+        fi
     fi
 fi
 
@@ -471,6 +482,8 @@ SPLITEND
     declare -a JIDS
     declare -a TOUCH
     
+    align2time=$((${queue_time}*5))
+
     for i in ${read1}
     do
         ext=${i#*$read1str}
@@ -514,7 +527,7 @@ ALGNR1
 )
         echo "Align read1 $jname job $jid1" >> ${debugdir}/jobs-${groupname}.out
         # align read2 fastq
-        jid2=$(qsub -terse -o ${debugdir}/alignR2-${groupname}-${jname}.out -e ${debugdir}/alignR2-${groupname}-${jname}.err -q ${queue} -r y -l h_rt=${queue_time} -N ${groupname}_align2${jname} -l h_vmem=6g -pe smp ${threads} -binding linear:${threads} -R y <<- ALGNR2
+        jid2=$(qsub -terse -o ${debugdir}/alignR2-${groupname}-${jname}.out -e ${debugdir}/alignR2-${groupname}-${jname}.err -q ${queue} -r y -l h_rt=${align2time} -N ${groupname}_align2${jname} -l h_vmem=6g -pe smp ${threads} -binding linear:${threads} -R y <<- ALGNR2
 			#!/bin/bash 
 			source $usePath
 			${load_bwa}
@@ -607,18 +620,21 @@ ALGNR2
             echo "(-: Sort read 2 aligned file by readname completed."
         fi
         # remove header, add read end indicator to readname
-        awk 'BEGIN{OFS="\t"}\$0~/^@/{print}\$0!~/^@/{\$1 = \$1"/1";print}' $name1${ext}_sort.sam > $name1${ext}_sort1.sam
-        awk 'BEGIN{OFS="\t"}\$0~/^@/{print}\$0!~/^@/{\$1 = \$1"/2";print}' $name2${ext}_sort.sam > $name2${ext}_sort1.sam
+				awk 'BEGIN{OFS="\t"}\$0!~/^@/{\$1 = \$1"/1";print}' $name1${ext}_sort.sam > $name1${ext}_sort1.sam
+				awk 'BEGIN{OFS="\t"}\$0!~/^@/{\$1 = \$1"/2";print}' $name2${ext}_sort.sam > $name2${ext}_sort1.sam
+				awk 'BEGIN{OFS="\t"}\$0~/^@/{print}' $name1${ext}_sort.sam > ${name1}_header.sam
 
         # merge the two sorted read end files
-        sort -S 2G -T $tmpdir -k1,1f -m $name1${ext}_sort1.sam $name2${ext}_sort1.sam > $name$ext.sam
+        sort -S 2G -T $tmpdir -k1,1f -m $name1${ext}_sort1.sam $name2${ext}_sort1.sam > $name${ext}1.sam
+
         if [ \$? -ne 0 ]
         then
             echo "***! Failure during merge of read files"			
             touch $errorfile
             exit 1
         else
-            rm $name1$ext.sa* $name2$ext.sa* $name1${ext}_sort*.sam $name2${ext}_sort*.sam
+            cat ${name1}_header.sam $name${ext}1.sam > $name$ext.sam
+            rm $name1$ext.sa* $name2$ext.sa* $name1${ext}_sort*.sam $name2${ext}_sort*.sam $name${ext}1.sam ${name1}_header.sam
             echo "(-: $name$ext.sam created successfully."
             touch $touchfile3
         fi 
@@ -921,7 +937,7 @@ then
         source $usePath
         $load_cluster
         qsub -o ${debugdir}/stats-${groupname}.out -e ${debugdir}/stats-${groupname}.err -q $long_queue -l h_vmem=16g -l m_mem_free=16g -N ${groupname}_stats -r y -l h_rt=${long_queue_time} $holdjobs <<- EOF  
-        if [ ! -f $touchfile5 ]; then touch $errorfile; exit 1; fi; if [ -s ${debugdir}/dedup-${groupname}.err ]; then touch $errorfile; exit 1; fi; source $usePath; $load_java; export _JAVA_OPTIONS=-Xmx16384m; export LC_ALL=en_US.UTF-8; tail -n1 $headfile | awk '{printf"%-1000s\n", \\\$0}' > $outputdir/inter.txt; ${juiceDir}/scripts/statistics.pl -s $site_file -l $ligation -o $outputdir/stats_dups.txt $outputdir/dups.txt; cat $splitdir/*.res.txt | awk -f ${juiceDir}/scripts/stats_sub.awk >> $outputdir/inter.txt; java -cp ${juiceDir}/scripts/ LibraryComplexity $outputdir inter.txt >> $outputdir/inter.txt; ${juiceDir}/scripts/statistics.pl -s $site_file -l $ligation -o $outputdir/inter.txt -q 1 $outputdir/merged_nodups.txt 
+        if [ ! -f $touchfile5 ]; then touch $errorfile; exit 1; fi; if [ -s ${debugdir}/dedup-${groupname}.err ]; then touch $errorfile; exit 1; fi; source $usePath; $load_java; export _JAVA_OPTIONS=-Xmx16384m; export LC_ALL=en_US.UTF-8; tail -n1 $headfile | awk '{printf"%-1000s\n", \\\$0}' > $outputdir/inter.txt; ${juiceDir}/scripts/statistics.pl -s $site_file -l $ligation -o $outputdir/stats_dups.txt $outputdir/dups.txt; cat $splitdir/*.res.txt | awk -f ${juiceDir}/scripts/stats_sub.awk >> $outputdir/inter.txt; ${juiceDir}/scripts/juicer_tools LibraryComplexity $outputdir inter.txt >> $outputdir/inter.txt; ${juiceDir}/scripts/statistics.pl -s $site_file -l $ligation -o $outputdir/inter.txt -q 1 $outputdir/merged_nodups.txt 
 EOF
         qsub -o ${debugdir}/abnormal-${groupname}.out -e ${debugdir}/abnormal-${groupname}.err -q $long_queue -l h_vmem=1g -l m_mem_free=1g -N ${groupname}_abnormal -r y -l h_rt=${long_queue_time} $holdjobs <<-EOF 
         if [ ! -f $touchfile5 ]; then touch $errorfile; exit 1; fi; if [ -s ${debugdir}/dedup-${groupname}.err ]; then touch $errorfile; exit 1; fi; cat $splitdir/*_abnorm.sam > $outputdir/abnormal.sam; cat $splitdir/*_unmapped.sam > $outputdir/unmapped.sam; awk -f ${juiceDir}/scripts/collisions.awk $outputdir/abnormal.sam > $outputdir/collisions.txt
@@ -931,7 +947,7 @@ EOF
         if [ ! -f $touchfile5 ]; then touch $errorfile; exit 1; fi; if [ -s ${debugdir}/dedup-${groupname}.err ]; then touch $errorfile; exit 1; fi; source $usePath; $load_java; export _JAVA_OPTIONS=-Xmx16384m; if [ "$nofrag" -eq 1 ]; then ${juiceDir}/scripts/juicer_tools pre -s $outputdir/inter.txt -g $outputdir/inter_hists.m -q 1 $outputdir/merged_nodups.txt $outputdir/inter.hic $genomePath; else ${juiceDir}/scripts/juicer_tools pre -f $site_file -s $outputdir/inter.txt -g $outputdir/inter_hists.m -q 1 $outputdir/merged_nodups.txt $outputdir/inter.hic $genomePath; fi ;
 EOF
      qsub -o ${debugdir}/stats30-${groupname}.out -e ${debugdir}/stats30-${groupname}.err -q $long_queue -l h_vmem=16g -l m_mem_free=16g -N ${groupname}_stats30 -r y -l h_rt=${long_queue_time} $holdjobs <<-EOF
-     if [ ! -f $touchfile5 ]; then touch $errorfile; exit 1; fi; if [ -s ${debugdir}/dedup-${groupname}.err ]; then touch $errorfile; exit 1; fi; source $usePath; $load_java; $load_bwa; export _JAVA_OPTIONS=-Xmx16384m; export LC_ALL=en_US.UTF-8; tail -n1 $headfile | awk '{printf"%-1000s\n", \\\$0}' > $outputdir/inter_30.txt; cat $splitdir/*.res.txt | awk -f ${juiceDir}/scripts/stats_sub.awk >> $outputdir/inter_30.txt; java -cp ${juiceDir}/scripts/ LibraryComplexity $outputdir inter_30.txt >> $outputdir/inter_30.txt; ${juiceDir}/scripts/statistics.pl -s $site_file -l $ligation -o $outputdir/inter_30.txt -q 30 $outputdir/merged_nodups.txt
+     if [ ! -f $touchfile5 ]; then touch $errorfile; exit 1; fi; if [ -s ${debugdir}/dedup-${groupname}.err ]; then touch $errorfile; exit 1; fi; source $usePath; $load_java; $load_bwa; export _JAVA_OPTIONS=-Xmx16384m; export LC_ALL=en_US.UTF-8; tail -n1 $headfile | awk '{printf"%-1000s\n", \\\$0}' > $outputdir/inter_30.txt; cat $splitdir/*.res.txt | awk -f ${juiceDir}/scripts/stats_sub.awk >> $outputdir/inter_30.txt; ${juiceDir}/scripts/juicer_tools LibraryComplexity $outputdir inter_30.txt >> $outputdir/inter_30.txt; ${juiceDir}/scripts/statistics.pl -s $site_file -l $ligation -o $outputdir/inter_30.txt -q 30 $outputdir/merged_nodups.txt
 EOF
  	qsub  -o ${debugdir}/hic30-${groupname}.out -e ${debugdir}/hic30-${groupname}.err -q $long_queue -l h_vmem=16g -l m_mem_free=16g -N ${groupname}_hic30 -r y -hold_jid ${groupname}_stats30 -l h_rt=${long_queue_time} <<- EOF 
      if [ ! -f $touchfile5 ]; then touch $errorfile; exit 1; fi; if [ -s ${debugdir}/dedup-${groupname}.err ]; then touch $errorfile; exit 1; fi; source $usePath; $load_java; export _JAVA_OPTIONS=-Xmx16384m; if [ "$nofrag" -eq 1 ]; then ${juiceDir}/scripts/juicer_tools pre -s $outputdir/inter_30.txt -g $outputdir/inter_30_hists.m -q 30 $outputdir/merged_nodups.txt $outputdir/inter_30.hic $genomePath; else ${juiceDir}/scripts/juicer_tools pre -f $site_file -s $outputdir/inter_30.txt -g $outputdir/inter_30_hists.m -q 30 $outputdir/merged_nodups.txt $outputdir/inter_30.hic $genomePath; fi
