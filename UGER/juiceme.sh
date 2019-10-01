@@ -238,10 +238,6 @@ then
         DpnII) ligation="GATCGATC";;
         MboI) ligation="GATCGATC";;
         NcoI) ligation="CCATGCATGG";;
-        MseI) ligation="TTATAA";;
-        MboI+MseI) ligation="(GATCGATC|TTATAA)";;
-        Csp6I+MseI) ligation="(GTATAC|TTATAA|GTATAA|TTATAC)";;
-        Csp6I) ligation="GTATAC";;
         none) ligation="XXXX";;
         *)  ligation="XXXX"
 	    echo "$site not listed as recognized enzyme. Using $site_file as site file"
