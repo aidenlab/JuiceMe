@@ -327,10 +327,10 @@ fi
 # Get version numbers of all software
 
 echo -ne "JuiceMe version $juiceme_version;"  >> $headfile
-bwa 2>&1 | awk '\$1=="Version:"{printf(" BWA %s; ", \$2)}'  >> $headfile 
+bwa 2>&1 | awk '$1=="Version:"{printf(" BWA %s; ", $2)}'  >> $headfile 
 echo -ne "$threads threads; "  >> $headfile
-java -version 2>&1 | awk 'NR==1{printf("%s; ", \$0);}'  >> $headfile 
-${juiceDir}/scripts/juicer_tools -V 2>&1 | awk '\$1=="Juicer" && \$2=="Tools"{printf("%s; ", \$0);}'  >> $headfile
+java -version 2>&1 | awk 'NR==1{printf("%s; ", $0);}'  >> $headfile 
+${juiceDir}/scripts/juicer_tools -V 2>&1 | awk '$1=="Juicer" && $2=="Tools"{printf("%s; ", $0);}'  >> $headfile
 echo "$0 $@"  >> $headfile
 
 
@@ -462,9 +462,9 @@ then
             echo "(-: Sort read 2 aligned file by readname completed."
         fi
         # remove header, add read end indicator to readname
-	awk 'BEGIN{OFS="\t"}\$0!~/^@/{\$1 = \$1"/1";print}' $name1${ext}_sort.sam > $name1${ext}_sort1.sam
-	awk 'BEGIN{OFS="\t"}\$0!~/^@/{\$1 = \$1"/2";print}' $name2${ext}_sort.sam > $name2${ext}_sort1.sam
-	awk 'BEGIN{OFS="\t"}\$0~/^@/{print}' $name1${ext}_sort.sam > ${name1}_header.sam
+	awk 'BEGIN{OFS="\t"}$0!~/^@/{$1 = $1"/1";print}' $name1${ext}_sort.sam > $name1${ext}_sort1.sam
+	awk 'BEGIN{OFS="\t"}$0!~/^@/{$1 = $1"/2";print}' $name2${ext}_sort.sam > $name2${ext}_sort1.sam
+	awk 'BEGIN{OFS="\t"}$0~/^@/{print}' $name1${ext}_sort.sam > ${name1}_header.sam
 
         # merge the two sorted read end files
         sort -S 2G -T $tmpdir -k1,1f -m $name1${ext}_sort1.sam $name2${ext}_sort1.sam > $name${ext}1.sam
@@ -511,7 +511,7 @@ then
             ${juiceDir}/scripts/fragment.pl ${name}${ext}_norm.txt ${name}${ext}.frag.txt $site_file
         elif [ "$site" == "none" ] || [ "$nofrag" -eq 1 ]
         then
-            awk '{printf("%s %s %s %d %s %s %s %d", \$1, \$2, \$3, 0, \$4, \$5, \$6, 1); for (i=7; i<=NF; i++) {printf(" %\s",\$i);}printf("\n");}' $name${ext}_norm.txt > $name${ext}.frag.txt
+            awk '{printf("%s %s %s %d %s %s %s %d", $1, $2, $3, 0, $4, $5, $6, 1); for (i=7; i<=NF; i++) {printf(" %\s",$i);}printf("\n");}' $name${ext}_norm.txt > $name${ext}.frag.txt
         else
             echo "***! No $name${ext}_norm.txt file created"
             exit 1                                                                                              
