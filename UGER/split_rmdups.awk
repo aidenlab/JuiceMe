@@ -40,7 +40,12 @@ BEGIN{
 
         sysstring = sprintf("touch %s %s %s", dupname,nodupname,optname);
         system(sysstring);
-        sysstring = sprintf("qsub -o %s -e %s -q %s -l h_rt=%s -N %s -l h_vmem=2g <<- EOF\nawk -f %s/scripts/dups.awk -v name=%s/%s %s/split%04d;\nEOF\n", outfile, errfile, queue, queue_time, sname, juicedir, dir, sname, dir, name, dir, name);
+        if (justexact) {
+            sysstring = sprintf("qsub -o %s -e %s -q %s -l h_rt=%s -N %s -l h_vmem=2g <<- EOF\nawk -f %s/scripts/dups.awk -v nowobble=1 -v name=%s/%s %s/split%04d;\nEOF\n", outfile, errfile, queue, queue_time, sname, juicedir, dir, sname, dir, name, dir, name);
+        }
+        else {
+            sysstring = sprintf("qsub -o %s -e %s -q %s -l h_rt=%s -N %s -l h_vmem=2g <<- EOF\nawk -f %s/scripts/dups.awk -v name=%s/%s %s/split%04d;\nEOF\n", outfile, errfile, queue, queue_time, sname, juicedir, dir, sname, dir, name, dir, name);
+        }
         system(sysstring);
         if (name==0) {
             waitstring=sprintf("%s", sname);
@@ -65,7 +70,12 @@ END {
 
     sysstring = sprintf("touch %s %s %s", dupname,nodupname,optname);
     system(sysstring);
-    sysstring = sprintf("qsub -o %s -e %s -q %s -l h_rt=%s -N %s -l h_vmem=2g <<-EOF\nawk -f %s/scripts/dups.awk -v name=%s/%s %s/split%04d;\nEOF\n", outfile, errfile, queue, queue_time, sname, juicedir, dir, sname, dir, name, dir, name);
+    if (justexact) {
+        sysstring = sprintf("qsub -o %s -e %s -q %s -l h_rt=%s -N %s -l h_vmem=2g <<- EOF\nawk -f %s/scripts/dups.awk -v nowobble=1 -v name=%s/%s %s/split%04d;\nEOF\n", outfile, errfile, queue, queue_time, sname, juicedir, dir, sname, dir, name, dir, name);
+    }
+    else {
+        sysstring = sprintf("qsub -o %s -e %s -q %s -l h_rt=%s -N %s -l h_vmem=2g <<- EOF\nawk -f %s/scripts/dups.awk -v name=%s/%s %s/split%04d;\nEOF\n", outfile, errfile, queue, queue_time, sname, juicedir, dir, sname, dir, name, dir, name);
+    }
     system(sysstring);
     if (name==0) {
         waitstring=sprintf("%s", sname);
