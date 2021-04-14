@@ -240,7 +240,7 @@ while (<>) {
           $very_small_dangling++;
         }
       }
-      elsif ($pos_dist < 20000) {
+      if ($pos_dist < 20000) {
         $small++;
         if ($is_dangling) {
           $small_dangling++;
@@ -406,7 +406,7 @@ else {
   print FILE "(";
 }
 printf FILE "%0.2f\%)\n", $intra*100/$unique; 
-
+printf FILE "Very short (<10bp): %s ", commify($very_small);
 printf FILE "Short Range (<20Kb): %s ", commify($small);
 if ($seq == 1) {
   printf FILE " (%0.2f\% / ", $small*100/$reads; 

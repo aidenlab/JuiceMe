@@ -71,7 +71,7 @@ juiceme_version="2.0.0"
 isRice=$(host $(hostname) | awk 'NR==1{if ($1~/rice/){print 1}else {print 0}}') #'
 isBCM=$(host $(hostname) | awk 'NR==1{if ($1~/bcm/){print 1}else {print 0}}') #'
 isVoltron=0
-call_gem=""
+call_gem="/gpfs0/work/neva/gem3-mapper/bin/gem-mapper --3c --bisulfite-conversion inferred-C2T-G2A"
 ## path additionals, make sure paths are correct for your system
 ## use cluster load commands
 if [ $isRice -eq 1 ] 
@@ -282,7 +282,7 @@ if [ ! -e "$refSeq" ]; then
 fi
 
 ## Check that index for refSeq exists
-if [[ ! -e "${refSeq%.*}.gem" ]] 
+if [[ ! -e "${refSeq%.*}_bisulfite.gem" ]] 
 then
     echo "***! Reference sequence $refSeq does not appear to have been indexed. Please run gem index on this file before running juiceme.";
     exit 1
@@ -330,11 +330,13 @@ if [ -z "$ligation" ]; then
     esac
 fi
 
-if [-z "$sampleName"]
+if [ -z "$sampleName" ]
 then
     sampleName="NULL"
 fi
-rgtag="@RG\tID:${sampleName}\tLB:NULL\tPL:ILLUMINA\tSM:NULL"
+# this isn't working, keeps complaining about ID tag missing
+#rgtag="-r @RG\tID:${sampleName}\tLB:NULL\tPL:ILLUMINA\tSM:NULL"
+rgtag=""
 
 ligation=$(echo $ligation | awk '{printf "'\''%s'\'' ", gensub("C","[CT]",$0)}')
 echo "Ligation: $ligation"
@@ -536,7 +538,7 @@ jid=`sbatch <<- HEADER | egrep -o -e "\b[0-9]+$"
 	# Get version numbers of all software
 	echo -ne "Sample name $sampleName;"
 	echo -ne " JuiceMe version $juiceme_version;"
- 	$call_gem 2>&1 | awk '\\\$1=="Version:"{printf(" GEM3 %s; ", \\\$2)}'
+ 	$call_gem --version 2>&1 | awk '{printf(" GEM3 %s; ", \\\$1)}'
 	echo -ne "$threads threads; "
 	if [ -n "$splitme" ]
 	then
@@ -706,8 +708,8 @@ CNTLIG`
 
 		# Align reads
 		date
-		echo "Running command $call_gem $re -I ${refSeq%.*}.gem $threadstring -r $rgtag -1 $name1$ext -2 $name2$ext -o $name$ext.sam
-		srun --ntasks=1 $call_gem $re -I ${refSeq%.*}.gem $threadstring -r $rgtag -1 $name1$ext -2 $name2$ext -o $name$ext.sam 
+		echo "Running command $call_gem $re -I ${refSeq%.*}_bisulfite.gem $threadstring $rgtag -1 $name1$ext -2 $name2$ext -o $name$ext.sam"
+		srun --ntasks=1 $call_gem $re -I ${refSeq%.*}_bisulfite.gem $threadstring $rgtag -1 $name1$ext -2 $name2$ext -o $name$ext.sam 
 		if [ \$? -ne 0 ]
 		then  
 		       touch $errorfile
@@ -1009,11 +1011,30 @@ DUPCHECK`
 	$userstring
 	${load_samtools}
 
-	samtools view -F 1024 -O sam ${outputdir}/merged_dedup.sam | awk -v mapq=1 -f ${juiceDir}/scripts/sam_to_pre.awk > ${outputdir}/merged0.txt 
+	samtools view $sthreadstring -F 1024 -O sam ${outputdir}/merged_dedup.sam | awk -v mapq=1 -f ${juiceDir}/scripts/sam_to_pre.awk > ${outputdir}/merged0.txt 
         date                                                                                                           
 MERGED0`
 
     sbatch_wait1="#SBATCH -d afterok:$jid1"
+    tmpj=`sbatch <<- METH | egrep -o -e "\b[0-9]+$"
+	#!/bin/bash -l
+        #SBATCH -p $queue
+        #SBATCH -o $debugdir/meth-%j.out                                                                     
+        #SBATCH -e $debugdir/meth-%j.err
+        #SBATCH -t $queue_time                                                                                 
+        ${sbatch_cpu_alloc}                                                                                    
+        #SBATCH --ntasks=1                                                                                     
+        #SBATCH --mem-per-cpu=10G                                                                              
+        #SBATCH -J "${groupname}_meth"
+        ${sbatch_wait}
+        $userstring
+        ${load_samtools}                            
+
+	samtools sort $sthreadstring ${outputdir}/merged_dedup.*am > ${outputdir}/merged_dedup_sort.bam
+	/gpfs0/home/neva/bin/MethylDackel extract -F 1024 $refSeq  ${outputdir}/merged_dedup_sort.bam 
+	/gpfs0/home/neva/bin/MethylDackel extract -F 1024 --cytosine_report --CHH --CHG  $refSeq  ${outputdir}/merged_dedup_sort.bam
+METH`
+
     jid2=`sbatch <<- MERGED30 | egrep -o -e "\b[0-9]+$" 
 	#!/bin/bash -l
 	#SBATCH -p $queue
