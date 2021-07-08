@@ -23,15 +23,37 @@
 #  THE SOFTWARE.
 ##########
 # Script to read in individual split outputs and put stats together
-# Juicer version 1.6
+# Juicer version 2.0
+# Number of dups must be sent in via -v dups=# or printed in file fname
+BEGIN {
+  if (length(fname)>0) {
+    while (getline < fname) {
+      dups=$1;
+    }
+  }
+}
 {
-    total += $2;    
-    unmapped += $3; 
-    normal_paired += $4;
-    chimeric_paired += $5;
-    chimeric_ambiguous += $6;
-    ligations += $1;
+  tot+=$2; # total reads
+  unm+=$3; # unmapped
+  norm+=$4; # normal paired
+  chim+=$5; # chimeric paired
+  coll+=$6; # collisions
+  lig+=$1; #ligations
+  singleton+=$7; #single alignment reads
+  insertsize+=$8; #average insert size
 }
 END{
-    printf("Sequenced Read Pairs:  %'d\n Normal Paired: %'d (%0.2f%)\n Chimeric Paired: %'d (%0.2f%)\n Chimeric Ambiguous: %'d (%0.2f%)\n Unmapped: %'d (%0.2f%)\n Ligation Motif Present: %'d (%0.2f%)\nAlignable (Normal+Chimeric Paired): %'d (%0.2f%)\n", total, normal_paired, normal_paired*100/total, chimeric_paired, chimeric_paired*100/total, chimeric_ambiguous, chimeric_ambiguous*100/total, unmapped, unmapped*100/total, ligations, ligations*100/total, normal_paired+chimeric_paired, (normal_paired+chimeric_paired)*100/total);
+  if (tot==0) tot=1;
+  printf("Sequenced Read Pairs:  %'d\n Normal Paired: %'d (%0.2f%)\n Chimeric Paired: %'d (%0.2f%)\n Chimeric Ambiguous: %'d (%0.2f%)\n Unmapped: %'d (%0.2f%)\n", tot, norm, norm*100/tot, chim, chim*100/tot, coll, coll*100/tot, unm, unm*100/tot);
+  if (ligation ~ /XXXX/) {
+    printf(" Ligation Motif Present: N/A\n");
+  }
+  else {
+    printf(" Ligation Motif Present: %'d (%0.2f%)\n", lig, lig*100/tot);
+  }
+  alignable=norm+chim;
+  printf(" Single Alignment: %'d (%0.2f%)\n Average insert size: %0.2f\nAlignable (Normal+Chimeric Paired): %'d (%0.2f%)\n",  singleton, singleton*100/tot, insertsize/NR, alignable, alignable*100/tot);
+  uniq=alignable-dups;
+  if (alignable==0) alignable=1;
+  printf("Unique Reads: %'d (%0.2f%, %0.2f%)\nDuplicates: %'d (%0.2f%, %0.2f%)\n", uniq, uniq*100/alignable, uniq*100/tot, dups, dups*100/alignable, dups*100/tot);
 }

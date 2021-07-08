@@ -29,7 +29,7 @@
 # chunk size, path to scripts directory, and the top-level directory (default 
 # current directory). In lieu of setting the genome ID, you can instead set the
 # reference sequence and the chrom.sizes file path, but the directory 
-# containing the reference sequence must also contain the GEM meth index files.
+# containing the reference sequence must also contain the meth index files.
 #
 # Splits the fastq files, creates jobs to align them, creates merge jobs that
 # wait for the alignment to finish, and creates a final merge job.
@@ -156,31 +156,50 @@ about=""
 nofrag=1
 # use wobble for dedupping by default (not just exact matches)
 justexact=0
+wobbleDist=4
+# assembly mode, produce old merged_nodups, early exit
+assembly=0
+# force cleanup
+cleanup=0
+# qc apa
+qc_apa=0
+# single-end input, default no
+singleend=0
+# sample name for RG tag
+sampleName="HiC_sample"
+# library name for RG tag
+libraryName="HiC_library"
 
-## Read arguments                                                     
-usageHelp="Usage: ${0##*/} [-g genomeID] [-d topDir] [-q queue] [-l long queue] [-s site]\n                 [-a about] [-S stage] [-p chrom.sizes path]\n                 [-y restriction site file] [-z reference genome file]\n                 [-C chunk size] [-D JuiceMe scripts directory]\n                 [-Q queue time limit] [-L long queue time limit] [-b ligation] [-t threads] [-T threadsHic]\n                 [-A account name] [-e] [-h] [-f] [-j]"
+usageHelp="Usage: ${0##*/} [-g genomeID] [-d topDir] [-q queue] [-l long queue] [-s site]\n                 [-a about] [-S stage] [-p chrom.sizes path] [-C chunk size]\n                 [-y restriction site file] [-z reference genome file]\n                 [-D JuiceMe scripts parent dir] [-Q queue time limit]\n                 [-L long queue time limit] [-b ligation] [-t threads]\n                 [-T threadsHic] [-A account] [-i sample] [-k library] [-w wobble]\n                 [-e] [-h] [-f] [-j] [-u] [--assembly] [--cleanup] [--qc_apa]"
 genomeHelp="* [genomeID] must be defined in the script, e.g. \"hg19\" or \"mm10\" (default \n  \"$genomeID\"); alternatively, it can be defined using the -z command"
 dirHelp="* [topDir] is the top level directory (default\n  \"$topDir\")\n     [topDir]/fastq must contain the fastq files\n     [topDir]/splits will be created to contain the temporary split files\n     [topDir]/aligned will be created for the final alignment"
 queueHelp="* [queue] is the queue for running alignments (default \"$queue\")"
 longQueueHelp="* [long queue] is the queue for running longer jobs such as the hic file\n  creation (default \"$long_queue\")"
 siteHelp="* [site] must be defined in the script, e.g.  \"HindIII\" or \"MboI\" \n  (default \"$site\")"
 aboutHelp="* [about]: enter description of experiment, enclosed in single quotes"
-stageHelp="* [stage]: must be one of \"chimeric\", \"merge\", \"dedup\", \"final\", \"postproc\", or \"early\".\n    -Use \"merge\" when alignment has finished but the merged_sort file has not\n     yet been created.\n    -Use \"dedup\" when the files have been merged into merged_sort but\n     merged_nodups has not yet been created.\n    -Use \"final\" when the reads have been deduped into merged_nodups but the\n     final stats and hic files have not yet been created.\n    -Use \"postproc\" when the hic files have been created and only\n     postprocessing feature annotation remains to be completed.\n    -Use \"early\" for an early exit, before the final creation of the hic files\n    Can also use -e flag to exit early"
-pathHelp="* [chrom.sizes path]: enter path for chrom.sizes file"
+stageHelp="* [stage]: must be one of \"chimeric\", \"merge\", \"dedup\", \"afterdedup\", \"final\", \"postproc\", or \"early\".\n    -Use \"chimeric\" when alignment has finished or to start from previously\n     aligned files\n    -Use \"merge\" when chimeric handling has finished but the merged_sort file\n     has not yet been created.\n    -Use \"dedup\" when the files have been merged into merged_sort but\n     merged_dedup has not yet been created.\n    -Use \"afterdedup\" when dedup is complete but statistics haven't been run\n    -Use \"final\" when the reads have been deduped into merged_dedup but the\n     final hic files have not yet been created.\n    -Use \"postproc\" when the hic files have been created and only\n     postprocessing feature annotation remains to be completed.\n    -Use \"early\" for an early exit, before the final creation of the hic files\n    Can also use -e flag to exit early"
+pathHelp="* [chrom.sizes path]: enter path for chrom.sizes file; can also use canonical\n  genome name here such as hg38"
 siteFileHelp="* [restriction site file]: enter path for restriction site file (locations of\n  restriction sites in genome; can be generated with the script\n  misc/generate_site_positions.py)"
 chunkHelp="* [chunk size]: number of lines in split files, must be multiple of 4\n  (default ${splitsize}, which equals $(awk -v ss=${splitsize} 'BEGIN{print ss/4000000}') million reads)"
 scriptDirHelp="* [JuiceMe scripts directory]: set the JuiceMe directory,\n  which should have scripts/ references/ and restriction_sites/ underneath it\n  (default ${juiceDir})"
-refSeqHelp="* [reference genome file]: enter path for reference sequence file, GEM3 index\n  files must be in same directory"
+refSeqHelp="* [reference genome file]: enter path for reference sequence file, BWA index\n  files must be in same directory"
 queueTimeHelp="* [queue time limit]: time limit for queue, i.e. -W 12:00 is 12 hours\n  (default ${queue_time})"
 longQueueTimeHelp="* [long queue time limit]: time limit for long queue, i.e. -W 168:00 is one week\n  (default ${long_queue_time})"
 ligationHelp="* [ligation junction]: use this string when counting ligation junctions"
-threadsHelp="* [threads]: number of threads when running GEM3 alignment and SAM compression"
+threadsHelp="* [threads]: number of threads when running BWA alignment"
 threadsHicHelp="* [threads for hic file creation]: number of threads when building hic file"
 userHelp="* [account name]: user account name on cluster"
+sampleHelp="* [sample name]: will be added to the SM portion of the read group (RG) tag"
+libraryHelp="* [library name]: will be added to the LB portion of the read group (RG) tag"
+wobbleHelp="* [wobble dist]: adjust wobble for deduping (default 4)"
 excludeHelp="* -f: include fragment-delimited maps in hic file creation"
 justHelp="* -j: just exact duplicates excluded at dedupping step"
 earlyexitHelp="* -e: Use for an early exit, before the final creation of the hic files"
-helpHelp="* -h: print this help and exit"
+singleEndHelp="* -u: Single end alignment"
+assemblyHelp="* --assembly: For use before 3D-DNA; early exit and create old style merged_nodups"
+cleanupHelp="* --cleanup: Automatically clean up files if pipeline successfully completes"
+qcapaHelp="* --qc_apa: Run QC APA"
+helpHelp="* -h, --help: print this help and exit"
 
 printHelpAndExit() {
     echo -e "$usageHelp"
@@ -202,13 +221,21 @@ printHelpAndExit() {
     echo -e "$threadsHelp"
     echo -e "$threadsHicHelp"
     echo -e "$userHelp"
+    echo -e "$sampleHelp"
+    echo -e "$libraryHelp"
+    echo -e "$wobbleHelp"
+    echo -e "$justHelp"
     echo -e "$earlyexitHelp"
-    echo "$excludeHelp"
+    echo -e "$excludeHelp"
+    echo -e "$singleEndHelp"
+    echo -e "$assemblyHelp"
+    echo -e "$cleanupHelp"
+    echo -e "$qcapaHelp"
     echo "$helpHelp"
     exit "$1"
 }
 
-while getopts "d:g:a:hq:s:p:l:y:z:S:C:D:Q:L:b:A:i:t:jfeT:" opt; do
+while getopts "d:g:a:hq:s:p:l:y:z:S:C:D:Q:L:b:A:i:t:jfuec-:T:w:k:" opt; do
     case $opt in
 	g) genomeID=$OPTARG ;;
 	h) printHelpAndExit 0;;
@@ -233,7 +260,18 @@ while getopts "d:g:a:hq:s:p:l:y:z:S:C:D:Q:L:b:A:i:t:jfeT:" opt; do
 	e) earlyexit=1 ;;
 	T) threadsHic=$OPTARG ;;
 	i) sampleName=$OPTARG ;;
-	[?]) printHelpAndExit 1;;
+	u) singleend=1 ;;
+	w) wobbleDist=$OPTARG ;;
+	k) libraryName=$OPTARG ;;
+	-) case "${OPTARG}" in 
+	        assembly) earlyexit=1; assembly=1 ;;
+	    cleanup)  cleanup=1 ;;
+	    qc_apa)   qc_apa=1 ;;
+	    "help")   printHelpAndExit 0;;
+	    *) echo "Unknown argument --${OPTARG}"; 
+	           printHelpAndExit 1;;
+           esac;;
+    [?]) printHelpAndExit 1;;
     esac
 done
 
@@ -243,12 +281,13 @@ then
 	chimeric) chimeric=1 ;;
         merge) merge=1 ;;
         dedup) dedup=1 ;;
+	afterdedup) afterdedup=1 ;;
         early) earlyexit=1 ;;
         final) final=1 ;;
 	postproc) postproc=1 ;; 
         *)  echo "$usageHelp"
-	    echo "$stageHelp"
-	    exit 1
+	        echo "$stageHelp"
+		    exit 1
     esac
 fi
 
@@ -261,6 +300,11 @@ then
 	hg38)	refSeq="${juiceDir}/references/hg38/hg38.fa";;
 	hg19)	refSeq="${juiceDir}/references/Homo_sapiens_assembly19.fasta";;
 	hg18)	refSeq="${juiceDir}/references/hg18.fasta";;
+	GRCh38) 
+	        refSeq="${juiceDir}/references/GCA_000001405.15_GRCh38_no_alt_analysis_set.fna"
+		site_file="${juiceDir}/restriction_sites/ENCFF132WAM.txt"
+		genomeID="hg38"
+		;;
 	*)	echo "$usageHelp"
 	    echo "$genomeHelp"
 	    exit 1
@@ -275,17 +319,21 @@ else
     fi
 fi
 
-## Check that refSeq exists 
-if [ ! -e "$refSeq" ]; then
-    echo "***! Reference sequence $refSeq does not exist";
-    exit 1;
-fi
-
-## Check that index for refSeq exists
-if [[ ! -e "${refSeq%.*}_bisulfite.gem" ]] 
+## Alignment checks; not necessary if later stages
+if [[ -z "$chimeric" && -z "$merge" &&  -z "$final" && -z "$dedup" && -z "$postproc" && -z "$afterdedup" ]] 
 then
-    echo "***! Reference sequence $refSeq does not appear to have been indexed. Please run gem index on this file before running juiceme.";
-    exit 1
+    ## Check that refSeq exists 
+    if [ ! -e "$refSeq" ]; then
+	echo "***! Reference sequence $refSeq does not exist";
+	exit 1;
+    fi
+
+    ## Check that index for refSeq exists
+    if [[ ! -e "${refSeq%.*}_bisulfite.gem" ]] 
+    then
+	echo "***! Reference sequence $refSeq does not appear to have been indexed. Please run gem index on this file before running juiceme.";
+	exit 1
+    fi
 fi
 
 ## Set ligation junction based on restriction enzyme
@@ -330,27 +378,15 @@ if [ -z "$ligation" ]; then
     esac
 fi
 
-if [ -z "$sampleName" ]
-then
-    sampleName="NULL"
-fi
-# this isn't working, keeps complaining about ID tag missing
-#rgtag="-r @RG\tID:${sampleName}\tLB:NULL\tPL:ILLUMINA\tSM:NULL"
-rgtag=""
-
 ligation=$(echo $ligation | awk '{printf "'\''%s'\'' ", gensub("C","[CT]",$0)}')
 echo "Ligation: $ligation"
+## If DNAse-type experiment, no fragment maps; or way to get around site file
 if [[ "$site" == "none" ]]
 then
     re=""
+    nofrag=1
 else
     re=$(echo $site | tr "+" "\n" | awk '{str=str" --restriction-enzyme "$1}END{print str}')
-fi
-
-## If DNAse-type experiment, no fragment maps; or way to get around site file
-if [[ "$site" == "none" ]] 
-then
-    nofrag=1;
 fi
 
 if [ -z "$site_file" ]
@@ -426,47 +462,66 @@ then
     threadHic30String=""
     threadNormString=""
 else
-    threadHicString="--threads $threadsHic -i ${outputdir}/merged0_index.txt -t ${outputdir}/HIC_tmp"
+    threadHicString="--threads $threadsHic -i ${outputdir}/merged1_index.txt -t ${outputdir}/HIC_tmp"
     threadHic30String="--threads $threadsHic -i ${outputdir}/merged30_index.txt -t ${outputdir}/HIC30_tmp"
     threadNormString="--threads $threadsHic"
 fi
 
-## Check that fastq directory exists and has proper fastq files
-if [ ! -d "$topDir/fastq" ]; then
-    echo "Directory \"$topDir/fastq\" does not exist."
-    echo "Create \"$topDir/fastq\" and put fastq files to be aligned there."
-    echo "Type \"juiceme.sh -h\" for help"
-    exit 1
-else 
-    if stat -t ${fastqdir} >/dev/null 2>&1
-    then
-	echo "(-: Looking for fastq files...fastq files exist"
-    else
-	if [ ! -d "$splitdir" ]; then 
-	    echo "***! Failed to find any files matching ${fastqdir}"
-	    echo "***! Type \"juiceme.sh -h \" for help"
-	    exit 1		
+## Alignment checks; not necessary if later stages
+if [[ -z "$chimeric" && -z "$merge" &&  -z "$final" && -z "$dedup" && -z "$afterdedup" && -z "$postproc" ]] 
+then
+    ## Check that fastq directory exists and has proper fastq files
+    if [ ! -d "$topDir/fastq" ]; then
+	echo "Directory \"$topDir/fastq\" does not exist."
+	echo "Create \"$topDir/fastq\" and put fastq files to be aligned there."
+	echo "Type \"juiceme.sh -h\" for help"
+	exit 1
+    else 
+	if stat -t ${fastqdir} >/dev/null 2>&1
+	then
+	    echo "(-: Looking for fastq files...fastq files exist"
+	else
+	    if [ ! -d "$splitdir" ]; then 
+		echo "***! Failed to find any files matching ${fastqdir}"
+		echo "***! Type \"juiceme.sh -h \" for help"
+		exit 1		
+	    fi
 	fi
     fi
-fi
-
-## Create output directory, only if not in postproc, dedup or final stages
-if [[ -d "$outputdir" && -z "$final" && -z "$dedup" && -z "$postproc" ]] 
-then
-    echo "***! Move or remove directory \"$outputdir\" before proceeding."
-    echo "***! Type \"juiceme.sh -h \" for help"
-    exit 1			
-else
-    if [[ -z "$final" && -z "$dedup" && -z "$postproc" ]]; then
-        mkdir "$outputdir" || { echo "***! Unable to create ${outputdir}, check permissions." ; exit 1; } 
+    testname=$(ls -lgG ${fastqdir} | awk 'NR==1{print $7}')
+    if [ "${testname: -3}" == ".gz" ]
+    then
+	read1=${splitdir}"/*${read1str}*.fastq.gz"
+	gzipped=1
+    else
+	read1=${splitdir}"/*${read1str}*.fastq"
     fi
+elif [[ -n "$chimeric" ]]
+then
+    read1=${splitdir}"/*.sam"
 fi
 
 ## Create split directory
 if [ -d "$splitdir" ]; then
     splitdirexists=1
+elif  [[ -n "$chimeric" ]]; then
+    echo "***! Chimeric stage requires already aligned files in ${splitdir}"  
+    exit 1 
 else
     mkdir "$splitdir" || { echo "***! Unable to create ${splitdir}, check permissions." ; exit 1; }
+fi
+
+
+## Create output directory, only if not in postproc, dedup or final stages
+if [[ -d "$outputdir" && -z "$final" && -z "$afterdedup" && -z "$dedup" && -z "$postproc" ]] 
+then
+    echo "***! Move or remove directory \"$outputdir\" before proceeding."
+    echo "***! Type \"juicer.sh -h \" for help"
+    exit 1
+else
+    if [[ -z "$final" && -z "$dedup" && -z "$postproc" && -z "$afterdedup" ]]; then
+        mkdir "$outputdir" || { echo "***! Unable to create ${outputdir}, check permissions." ; exit 1; } 
+    fi
 fi
 
 ## Create temporary directory, used for sort later
@@ -494,15 +549,6 @@ then
 	    splitme=1
 	fi
     fi
-fi
-
-testname=$(ls -lgG ${fastqdir} | awk 'NR==1{print $7}')
-if [ "${testname: -3}" == ".gz" ]
-then
-    read1=${splitdir}"/*${read1str}*.fastq.gz"
-    gzipped=1
-else
-    read1=${splitdir}"/*${read1str}*.fastq"
 fi
 
 if [ -z "$user" ]
@@ -538,7 +584,8 @@ jid=`sbatch <<- HEADER | egrep -o -e "\b[0-9]+$"
 	# Get version numbers of all software
 	echo -ne "Sample name $sampleName;"
 	echo -ne " JuiceMe version $juiceme_version;"
- 	$call_gem --version 2>&1 | awk '{printf(" GEM3 %s; ", \\\$1)}'
+	bwa 2>&1 | awk '\\\$1=="Version:"{printf(" BWA %s; ", \\\$2)}'
+	/gpfs0/home/neva/bwa-meth/bwameth.py --version | awk '{printf("%s; ", \\\$0)}' 
 	echo -ne "$threads threads; "
 	if [ -n "$splitme" ]
 	then
@@ -560,7 +607,7 @@ then
 fi
 
 # Not in merge, dedup,  or final stage, i.e. need to split and align files.
-if [ -z $merge ] && [ -z $final ] && [ -z $dedup ] && [ -z $postproc ]
+if [ -z $merge ] && [ -z $final ] && [ -z $dedup ] && [ -z $postproc ] && [ -z $afterdedup ]
 then
     if [ "$nofrag" -eq 0 ]
     then
@@ -662,15 +709,26 @@ SPLITEND`
 	name1=${name}${read1str}
 	name2=${name}${read2str}	
 	jname=$(basename "$name")${ext}
-        usegzip=0
-        if [ "${ext: -3}" == ".gz" ]
-        then
-            usegzip=1
-	fi
-	touchfile=${tmpdir}/${jname}
 
-	# count ligations
-	jid=`sbatch <<- CNTLIG |  egrep -o -e "\b[0-9]+$"
+	# RG group; ID derived from paired-end name, sample and library can be user set
+	if [ $singleend -eq 1 ]
+	then
+	    rg="@RG\\tID:${jname%.fastq*}\\tSM:{sampleName}\\tLB:${libraryName}"
+	else
+	    rg="@RG\\tID:${jname%.fastq*}\\tSM:{sampleName}\\tPL:ILM\\tLB:${libraryName}"
+	fi
+
+	if [ -z "$chimeric" ]
+	then
+            usegzip=0
+            if [ "${ext: -3}" == ".gz" ]
+            then
+		usegzip=1
+	    fi
+	    touchfile=${tmpdir}/${jname}
+
+	    # count ligations
+	    jid=`sbatch <<- CNTLIG |  egrep -o -e "\b[0-9]+$"
 		#!/bin/bash -l
 		#SBATCH -p $queue
 		#SBATCH -t $queue_time
@@ -682,17 +740,15 @@ SPLITEND`
                 $userstring			
 
 		date
-		export usegzip=${usegzip}; export name=${name}; export name1=${name1}; export name2=${name2}; export ext=${ext}; export ligation=${ligation}; ${juiceDir}/scripts/countligations.sh
+		export usegzip=${usegzip}; export name=${name}; export name1=${name1}; export name2=${name2}; export ext=${ext}; export ligation=${ligation}; export singleend=${singleend}; ${juiceDir}/scripts/countligations.sh
 		date
 CNTLIG`
 	dependcount="$jid"
 
-	if [ -z "$chimeric" ]
-	then
 	    # align fastqs
 	    jid=`sbatch <<- ALGNR1 | egrep -o -e "\b[0-9]+$"
 		#!/bin/bash -l
-		#SBATCH -p $queue
+		#SBATCH -p weka
 		#SBATCH -o $debugdir/align1-%j.out
 		#SBATCH -e $debugdir/align1-%j.err
 		#SBATCH -t $queue_time
@@ -705,67 +761,164 @@ CNTLIG`
                 $userstring			
 
 		${load_bwa}
-
+		conda activate
 		# Align reads
 		date
-		echo "Running command $call_gem $re -I ${refSeq%.*}_bisulfite.gem $threadstring $rgtag -1 $name1$ext -2 $name2$ext -o $name$ext.sam"
-		srun --ntasks=1 $call_gem $re -I ${refSeq%.*}_bisulfite.gem $threadstring $rgtag -1 $name1$ext -2 $name2$ext -o $name$ext.sam 
+		if [ $singleend -eq 1 ]
+		then
+			echo "Running bwameth.py $threadstring -5SP --do-not-penalize-chimeras --reference ${refSeq} -R $rg $name1$ext > $name$ext.sam"    
+			/gpfs0/home/neva/bwa-meth/bwameth.py $threadstring -5SP --do-not-penalize-chimeras --reference ${refSeq} -R $rg $name1$ext > $name$ext.sam
+		else
+			echo "Running bwameth.py $threadstring -5SP --do-not-penalize-chimeras --reference ${refSeq} $name1$ext $name2$ext > $name$ext.sam"
+			/gpfs0/home/neva/bwa-meth/bwameth.py $threadstring -5SP --do-not-penalize-chimeras --reference ${refSeq} $name1$ext $name2$ext > $name$ext.sam
+		fi
 		if [ \$? -ne 0 ]
 		then  
 		       touch $errorfile
 		       exit 1
 		else
-		       echo "(-: GEM3 align of $name$ext.sam done successfully"
+		       echo "(-: Align of $name$ext.sam done successfully"
 		fi
 		date
 ALGNR1`
 	    dependalign="afterok:$jid:$dependcount"
 	else
-	    dependalign="afterok:$dependcount"
+	    name=${i%.sam}
+	    ext=""
+            jid=`sbatch <<- CNTLINE |  egrep -o -e "\b[0-9]+$"
+		#!/bin/bash -l
+		#SBATCH -p $queue
+		#SBATCH -t $queue_time
+		#SBATCH -c 1
+		#SBATCH -o $debugdir/count_line-%j.out
+		#SBATCH -e $debugdir/count_line-%j.err
+		#SBATCH -J "${groupname}_${jname}_Count_Line"
+		#SBATCH --mem=5G
+		${load_awk}
+		${load_samtools}
+                $userstring
+		date
+		echo -ne "0 " > ${name}${ext}_norm.txt.res.txt
+		samtools flagstat $i | awk '\\\$0~/paired in sequencing/{print \\\$1*2; exit}' > ${i}_linecount.txt
+		date
+CNTLINE`
+	    dependalign="afterok:$jid"
 	fi
 
 	# wait for alignment, chimeric read handling
-	jid=`sbatch <<- MRGALL | egrep -o -e "\b[0-9]+$"
+	if [ "$site" != "none" ] && [ -e "$site_file" ] 
+	then
+	    jid=`sbatch <<- MRGALL | egrep -o -e "\b[0-9]+$"
 		#!/bin/bash -l
 		#SBATCH -p $long_queue
 		#SBATCH -o $debugdir/merge-%j.out
 		#SBATCH -e $debugdir/merge-%j.err
-		#SBATCH --mem=40G
+		#SBATCH --mem=10G
 		#SBATCH -t $long_queue_time
-		#SBATCH -c 12
+		#SBATCH -c 1
+		#SBATCH --ntasks=1
+		#SBATCH -d $dependalign
+		#SBATCH -J "${groupname}_merge_${jname}"
+		#SBATCH --threads-per-core=1
+                $userstring
+		${load_awk}
+		date
+		if [ $singleend -eq 1 ]
+		then
+			time awk -v stem=${name}${ext}_norm -v site_file=$site_file -v singleend=$singleend -f $juiceDir/scripts/chimeric_sam.awk $name$ext.sam > $name$ext.sam3
+		else
+			time awk -v stem=${name}${ext}_norm -v site_file=$site_file -f $juiceDir/scripts/chimeric_sam.awk $name$ext.sam > $name$ext.sam3
+		fi
+		date
+MRGALL`
+	    dependalign="afterok:$jid"
+	else
+	    if [ $singleend -eq 1 ]
+	    then
+		jid=`sbatch <<- MRGALL1 | egrep -o -e "\b[0-9]+$"
+		#!/bin/bash -l
+		#SBATCH -p $long_queue
+		#SBATCH -o $debugdir/merge1-%j.out
+		#SBATCH -e $debugdir/merge1-%j.err
+		#SBATCH --mem=10G
+		#SBATCH -t $long_queue_time
+		#SBATCH -c 1
 		#SBATCH --ntasks=1
 		#SBATCH -d $dependalign
 		#SBATCH -J "${groupname}_merge_${jname}"
                 #SBATCH --threads-per-core=1
                 $userstring
 		${load_awk}
+		#time awk -v maxcount=1000000 -f $juiceDir/scripts/calculate_insert_size.awk $name$ext.sam > $name$ext.insert_size
+		#will need to combine chimeric_sam and adjust_insert_size 
+		time awk -v stem=${name}${ext}_norm -v singleend=$singleend -f $juiceDir/scripts/chimeric_sam.awk $name$ext.sam > $name$ext.sam3
+MRGALL1`
+		dependalign="afterok:$jid"
+	    else
+		jid=`sbatch <<- MRGALL1 | egrep -o -e "\b[0-9]+$"
+		#!/bin/bash -l
+		#SBATCH -p $long_queue
+		#SBATCH -o $debugdir/merge1-%j.out
+		#SBATCH -e $debugdir/merge1-%j.err
+		#SBATCH --mem=10G
+		#SBATCH -t $long_queue_time
+		#SBATCH -c 1
+		#SBATCH --ntasks=1
+		#SBATCH -d $dependalign
+		#SBATCH -J "${groupname}_merge_${jname}"
+                #SBATCH --threads-per-core=1
+                $userstring
+		${load_awk}
+		#time awk -v maxcount=1000000 -f $juiceDir/scripts/calculate_insert_size.awk $name$ext.sam > $name$ext.insert_size
+		#will need to combine chimeric_sam and adjust_insert_size 
+		time awk -v stem=${name}${ext}_norm -f $juiceDir/scripts/chimeric_sam.awk $name$ext.sam > $name$ext.sam2
+MRGALL1`
+		dependalign="afterok:$jid"
+		jid=`sbatch <<- MRGALL3 | egrep -o -e "\b[0-9]+$"
+		#!/bin/bash -l
+		#SBATCH -p $long_queue
+		#SBATCH -o $debugdir/merge2-%j.out
+		#SBATCH -e $debugdir/merge2-%j.err
+		#SBATCH --mem=10G
+		#SBATCH -t $long_queue_time
+		#SBATCH -c 1
+		#SBATCH --ntasks=1
+		#SBATCH -d $dependalign
+		#SBATCH -J "${groupname}_merge_${jname}"
+                #SBATCH --threads-per-core=1
+                $userstring
+		${load_awk}
+		time awk -v avgInsertFile=${name}${ext}_norm.txt.res.txt -f $juiceDir/scripts/adjust_insert_size.awk $name$ext.sam2 > $name$ext.sam3
+MRGALL3`
+		dependalign="afterok:$jid"
+	    fi
+	fi
+	jid2=`sbatch <<- MRGALL2 | egrep -o -e "\b[0-9]+$"
+		#!/bin/bash -l
+		#SBATCH -p $long_queue
+		#SBATCH -o $debugdir/mergesort-%j.out
+		#SBATCH -e $debugdir/mergesort-%j.err
+		#SBATCH --mem=50G
+		#SBATCH -t $long_queue_time
+		#SBATCH -c $threads
+		#SBATCH --ntasks=1
+		#SBATCH -d $dependalign 
+		#SBATCH -J "${groupname}_mergesort_${jname}"
+		#SBATCH --threads-per-core=1 
+		$userstring
 		${load_samtools}
-		date
-		# call chimeric script to deal with chimeric reads; sorted file is sorted by read name at this point		
-		if [ "$site" != "none" ] && [ -e "$site_file" ] 
-		then		
-			awk -v stem=${name}${ext}_norm -v site_file=$site_file -f $juiceDir/scripts/chimeric_sam.awk $name$ext.sam | samtools sort -t cb -n $sthreadstring >  ${name}${ext}.bam
-		else
-			awk -v stem=${name}${ext}_norm -f $juiceDir/scripts/chimeric_sam.awk $name$ext.sam > $name$ext.sam2
-			awk -v avgInsertFile=${name}${ext}_norm.txt.res.txt -f $juiceDir/scripts/adjust_insert_size.awk $name$ext.sam2 | samtools sort -t cb -n $sthreadstring >  ${name}${ext}.bam
-		fi
-
-		if [[ -s ${name}${ext}.bam  ]] 
-		then    
-			rm $name$ext.sam* 
+		if time samtools sort -t cb -n -O SAM $sthreadstring $name$ext.sam3 >  ${name}${ext}.sam
+		then
+			rm -f $name$ext.sam2 $name$ext.sam3
+			touch $touchfile
 		else
 			echo "***! Failure during chimera handling of $name${ext}"
 			touch $errorfile
-			exit 1   
-
-		fi  
-		
-		touch $touchfile
-		date
-MRGALL`
-
-	dependmerge="${dependmerge}:${jid}"
-	ARRAY[countjobs]="${groupname}_merge_${jname}"
+			exit 1
+		fi
+MRGALL2`
+	dependmerge="${dependmerge}:${jid2}"
+	ARRAY[countjobs]="${groupname}_mergesort_${jname}"
 	JIDS[countjobs]="${jid}"
 	TOUCH[countjobs]="$touchfile"
         countjobs=$(( $countjobs + 1 ))
@@ -803,7 +956,7 @@ EOF`
 fi  # Not in merge, dedup,  or final stage, i.e. need to split and align files.
 
 # Not in final, dedup, or postproc
-if [ -z $final ] && [ -z $dedup ] && [ -z $postproc ]
+if [ -z $final ] && [ -z $dedup ] && [ -z $postproc ] && [ -z $afterdedup ]
 then
     if [ -z $merge ]
     then
@@ -854,7 +1007,7 @@ then
 			mv $donesplitdir/* $splitdir/.
 		fi
 
-		if ! samtools merge -t cb -n $sthreadstring $outputdir/merged_sort.bam  $splitdir/*.bam
+		if ! samtools merge -t cb -n $sthreadstring $outputdir/merged_sort.sam  $splitdir/*.sam
 		then
 			echo "***! Some problems occurred somewhere in creating sorted align files."
 			touch $errorfile
@@ -870,7 +1023,7 @@ EOF`
 fi
 
 # Remove the duplicates from the big sorted file
-if [ -z $final ] && [ -z $postproc ]
+if [ -z $final ] && [ -z $postproc ] && [ -z $afterdedup ]
 then
     if [ -z $dedup ]
     then
@@ -922,7 +1075,7 @@ DEDUPGUARD`
             exit 1 
         fi 
 	squeue -u $USER -o "%A %T %j %E %R" | column -t
-	samtools view -h $outputdir/merged_sort.bam | awk -v queue=$long_queue -v groupname=$groupname -v debugdir=$debugdir -v dir=$outputdir -v topDir=$topDir -v juicedir=$juiceDir -v site=$site -v genomeID=$genomeID -v genomePath=$genomePath -v user=$USER -v guardjid=$guardjid -v justexact=$justexact -f $juiceDir/scripts/split_rmdups_sam.awk 
+	awk -v queue=$long_queue -v groupname=$groupname -v debugdir=$debugdir -v dir=$outputdir -v topDir=$topDir -v juicedir=$juiceDir -v site=$site -v genomeID=$genomeID -v genomePath=$genomePath -v user=$USER -v guardjid=$guardjid -v justexact=$justexact -v wobbleDist=$wobbleDist -f $juiceDir/scripts/split_rmdups_sam.awk $outputdir/merged_sort.sam	
 
 	##Schedule new job to run after last dedup part:
 	##Push guard to run after last dedup is completed:
@@ -988,52 +1141,33 @@ if [ -z $postproc ] && [ -z $final ]
 	${sbatch_wait}
         $userstring			
 	${load_awk}
-	${load_samtools}
 	date 
-	samtools view -h ${outputdir}/merged_sort.bam | wc -l | awk '{printf("%s ", \\\$1)}' > $debugdir/dupcheck-${groupname}
+	wc -l ${outputdir}/merged_sort.sam |  awk '{printf("%s ", \\\$1)}' > $debugdir/dupcheck-${groupname}
 	wc -l ${outputdir}/merged_dedup.sam | awk '{printf("%s ", \\\$1)}' >> $debugdir/dupcheck-${groupname}
 	cat $debugdir/dupcheck-${groupname}
 	awk -v debugdir=$debugdir -v queue=$queue -v groupname=$groupname -v dir=$outputdir '$awkscript' $debugdir/dupcheck-${groupname}
 DUPCHECK`
 
     sbatch_wait="#SBATCH -d afterok:$jid"
-    jid1=`sbatch <<- MERGED0 | egrep -o -e "\b[0-9]+$" 
+    jid1=`sbatch <<- MERGED1 | egrep -o -e "\b[0-9]+$" 
 	#!/bin/bash -l
 	#SBATCH -p $queue
-	#SBATCH -o $debugdir/merged0-%j.out
-	#SBATCH -e $debugdir/merged0-%j.err
+	#SBATCH -o $debugdir/merged1-%j.out
+	#SBATCH -e $debugdir/merged1-%j.err
 	#SBATCH -t $queue_time
 	${sbatch_cpu_alloc}
 	#SBATCH --ntasks=1
 	#SBATCH --mem-per-cpu=10G
-	#SBATCH -J "${groupname}_merged0"
+	#SBATCH -J "${groupname}_merged1"
 	${sbatch_wait}
 	$userstring
 	${load_samtools}
 
-	samtools view $sthreadstring -F 1024 -O sam ${outputdir}/merged_dedup.sam | awk -v mapq=1 -f ${juiceDir}/scripts/sam_to_pre.awk > ${outputdir}/merged0.txt 
+	samtools view $sthreadstring -F 1024 -O sam ${outputdir}/merged_dedup.sam | awk -v mapq=1 -f ${juiceDir}/scripts/sam_to_pre.awk > ${outputdir}/merged1.txt 
         date                                                                                                           
-MERGED0`
+MERGED1`
 
     sbatch_wait1="#SBATCH -d afterok:$jid1"
-    tmpj=`sbatch <<- METH | egrep -o -e "\b[0-9]+$"
-	#!/bin/bash -l
-        #SBATCH -p $queue
-        #SBATCH -o $debugdir/meth-%j.out                                                                     
-        #SBATCH -e $debugdir/meth-%j.err
-        #SBATCH -t $queue_time                                                                                 
-        ${sbatch_cpu_alloc}                                                                                    
-        #SBATCH --ntasks=1                                                                                     
-        #SBATCH --mem-per-cpu=10G                                                                              
-        #SBATCH -J "${groupname}_meth"
-        ${sbatch_wait}
-        $userstring
-        ${load_samtools}                            
-
-	samtools sort $sthreadstring ${outputdir}/merged_dedup.*am > ${outputdir}/merged_dedup_sort.bam
-	/gpfs0/home/neva/bin/MethylDackel extract -F 1024 $refSeq  ${outputdir}/merged_dedup_sort.bam 
-	/gpfs0/home/neva/bin/MethylDackel extract -F 1024 --cytosine_report --CHH --CHG  $refSeq  ${outputdir}/merged_dedup_sort.bam
-METH`
 
     jid2=`sbatch <<- MERGED30 | egrep -o -e "\b[0-9]+$" 
 	#!/bin/bash -l
@@ -1071,9 +1205,30 @@ MERGED30`
 	if samtools view -b $sthreadstring ${outputdir}/merged_dedup.sam > ${outputdir}/merged_dedup.bam
 	then
 		rm ${outputdir}/merged_dedup.sam
-		rm ${outputdir}/merged_sort.bam
+		rm ${outputdir}/merged_sort.sam
 	fi
 BAMRM`
+
+    tmpj=`sbatch <<- METH | egrep -o -e "\b[0-9]+$"
+	#!/bin/bash -l
+	#SBATCH -p commons
+	#SBATCH -o $debugdir/meth-%j.out                                                                     
+	#SBATCH -e $debugdir/meth-%j.err
+	#SBATCH -t $queue_time                                                                                 
+	${sbatch_cpu_alloc}                                                                                    
+	#SBATCH --ntasks=1                                                                                     
+	#SBATCH --mem-per-cpu=10G                                                                              
+	#SBATCH -J "${groupname}_meth"
+	#SBATCH -d afterok:$jid
+	$userstring
+        ${load_samtools}                            
+	export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/gpfs0/home/neva/lib
+	samtools sort $sthreadstring ${outputdir}/merged_dedup.bam > ${outputdir}/merged_dedup_sort.bam
+	/gpfs0/home/neva/bin/MethylDackel extract -F 1024 --keepSingleton --keepDiscordant $refSeq ${outputdir}/merged_dedup_sort.bam 
+	/gpfs0/home/neva/bin/MethylDackel extract -F 1024 --keepSingleton --keepDiscordant --cytosine_report --CHH --CHG $refSeq ${outputdir}/merged_dedup_sort.bam
+	${juiceDir}/scripts/conversion.sh ${outputdir}/merged_dedup_sort.cytosine_report.txt > ${outputdir}/conversion_report.txt
+	rm ${outputdir}/merged_dedup_sort.bam ${outputdir}/merged_dedup_sort.cytosine_report.txt
+METH`
 
     jid=`sbatch <<- PRESTATS | egrep -o -e "\b[0-9]+$"
 	#!/bin/bash -l
@@ -1094,9 +1249,19 @@ BAMRM`
         export IBM_JAVA_OPTIONS="-Xmx1024m -Xgcthreads1"
         export _JAVA_OPTIONS="-Xmx1024m -Xms1024m"
         tail -n1 $headfile | awk '{printf"%-1000s\n", \\\$0}' > $outputdir/inter.txt
-	cat $splitdir/*.res.txt | awk -f ${juiceDir}/scripts/stats_sub.awk >> $outputdir/inter.txt
-	awk 'NR==FNR{if (\\\$1 ~ /Alignable/){split(\\\$0,a,":");split(a[2],b); gsub(",","", b[1]); tot=int(b[1]);} }FNR!=NR{sum+=\\\$1}END{print "Unique Reads: ", int(tot-sum); print "Duplicates:",sum}' $outputdir/inter.txt $debugdir/${groupname}*_count >> $outputdir/inter.txt 
+	# count duplicates via samtools view -c
+	# for paired end, count only first in pair to avoid double counting
+	if [ $singleend -eq 1 ] 
+	then 
+		samtools view $sthreadstring -c -f 1024 -F 256 $outputdir/merged_dedup.*am > $outputdir/tmp
+	else 
+		samtools view $sthreadstring -c -f 1089 -F 256 $outputdir/merged_dedup.*am > $outputdir/tmp
+	fi
+	cat $splitdir/*.res.txt | awk -v fname=$outputdir/tmp -v ligation=$ligation -f ${juiceDir}/scripts/stats_sub.awk >> $outputdir/inter.txt
+
         cp $outputdir/inter.txt $outputdir/inter_30.txt                                                       
+	rm $outputdir/tmp
+
         date
 PRESTATS`
 
@@ -1121,7 +1286,7 @@ PRESTATS`
 			echo "***! Found errorfile. Exiting." 
 			exit 1 
 		fi 
-		perl ${juiceDir}/scripts/statistics.pl -s $site_file -l $ligation -o $outputdir/inter.txt $outputdir/merged0.txt
+		${juiceDir}/scripts/juicer_tools statistics $site_file $outputdir/inter.txt $outputdir/merged1.txt $genomeID
 
 		date
 STATS`
@@ -1140,8 +1305,7 @@ STATS`
 		#SBATCH -J "${groupname}_stats30"
 		${sbatch_wait00}
                 $userstring			
-
-		perl ${juiceDir}/scripts/statistics.pl -s $site_file -l $ligation -o $outputdir/inter_30.txt $outputdir/merged30.txt
+		${juiceDir}/scripts/juicer_tools statistics $site_file $outputdir/inter_30.txt $outputdir/merged30.txt $genomeID
 		date
 STATS30`
 
@@ -1160,6 +1324,29 @@ then
     # if early exit, we stop here, once the stats are calculated
     if [ ! -z "$earlyexit" ]
     then
+	if [ $assembly -eq 1 ]
+	then
+	    jid=`sbatch <<- MND | egrep -o -e "\b[0-9]+$" 
+		#!/bin/bash -l
+		#SBATCH -p $queue
+		#SBATCH --mem=2G
+		#SBATCH -o $debugdir/mnd-%j.out
+		#SBATCH -e $debugdir/mnd-%j.err
+		#SBATCH -t 1200
+		#SBATCH -c $threads
+		#SBATCH --ntasks=1
+		#SBATCH -J "${groupname}_mnd"     
+		${sbatch_wait1}
+		$userstring   
+		${load_samtools}
+		date
+
+		samtools view $sthreadstring -O SAM -F 1024 $outputdir/merged_dedup.*am | awk -v mnd=1 -f ${juiceDir}/scripts/sam_to_pre.awk > ${outputdir}/merged_nodups.txt 
+		date
+MND`
+	    sbatch_wait1="afterok:$jid"
+	fi
+
 	jid=`sbatch <<- FINCLN1 | egrep -o -e "\b[0-9]+$" 
 	#!/bin/bash -l
 	#SBATCH -p $queue
@@ -1174,7 +1361,14 @@ then
 	${sbatch_wait1}
         $userstring	   
 	date
-	export splitdir=${splitdir}; export outputdir=${outputdir}; export early=1; ${juiceDir}/scripts/check.sh
+	export splitdir=${splitdir}; export outputdir=${outputdir}; export early=1; 
+        if ${juiceDir}/scripts/check.sh
+        then
+           if [ "$cleanup" = 1 ]
+           then
+              ${juiceDir}/scripts/cleanup.sh
+           fi
+        fi
 	date
 FINCLN1`
 	echo "(-: Finished adding all jobs... Now is a good time to get that cup of coffee... Last job id $jid"
@@ -1206,17 +1400,17 @@ FINCLN1`
 	mkdir ${outputdir}"/HIC_tmp"
 
 	# multithreaded and index doesn't exist yet
-	if [[ $threadsHic -gt 1 ]] && [[ ! -s ${outputdir}/merged0_index.txt ]] 
+	if [[ $threadsHic -gt 1 ]] && [[ ! -s ${outputdir}/merged1_index.txt ]] 
 	then
-	  time ${juiceDir}/scripts/index_by_chr.awk ${outputdir}/merged0.txt 500000 > ${outputdir}/merged0_index.txt
+	  time ${juiceDir}/scripts/index_by_chr.awk ${outputdir}/merged1.txt 500000 > ${outputdir}/merged1_index.txt
 	fi
 
 
 	if [ "$nofrag" -eq 1 ]
 	then 
-	    time ${juiceDir}/scripts/juicer_tools pre -n -s $outputdir/inter.txt -g $outputdir/inter_hists.m -q 1 -r 2500000,1000000,500000,250000,100000,50000,25000,10000,5000,2000,1000,500,200,100 $threadHicString $outputdir/merged0.txt $outputdir/inter.hic $genomePath
+	    time ${juiceDir}/scripts/juicer_tools pre -n -s $outputdir/inter.txt -g $outputdir/inter_hists.m -q 1 -r 2500000,1000000,500000,250000,100000,50000,25000,10000,5000,2000,1000,500,200,100 $threadHicString $outputdir/merged1.txt $outputdir/inter.hic $genomePath
 	else
-	    time ${juiceDir}/scripts/juicer_tools pre -n -f $site_file -s $outputdir/inter.txt -g $outputdir/inter_hists.m -q 1 -r 2500000,1000000,500000,250000,100000,50000,25000,10000,5000,2000,1000,500,200,100 $threadHicString $outputdir/merged0.txt $outputdir/inter.hic $genomePath
+	    time ${juiceDir}/scripts/juicer_tools pre -n -f $site_file -s $outputdir/inter.txt -g $outputdir/inter_hists.m -q 1 -r 2500000,1000000,500000,250000,100000,50000,25000,10000,5000,2000,1000,500,200,100 $threadHicString $outputdir/merged1.txt $outputdir/inter.hic $genomePath
 	fi
 	if [[ $threadsHic -gt 1 ]]
 	then 
@@ -1338,6 +1532,28 @@ jid=`sbatch <<- ARROWS | egrep -o -e "\b[0-9]+$"
 ARROWS`
 dependarrows="${dependhiccups}:$jid"
 
+if [ "$qc_apa" = 1 ]
+then
+    jid=`sbatch <<- QC | egrep -o -e "\b[0-9]+$"
+	#!/bin/bash -l
+	#SBATCH -p $queue
+	#SBATCH --mem-per-cpu=4G
+	#SBATCH -o $debugdir/qc-%j.out
+	#SBATCH -e $debugdir/qc-%j.err
+	#SBATCH -t $queue_time
+	#SBATCH --ntasks=1
+	#SBATCH -J "${groupname}_qc_apa"
+	${sbatch_wait}
+	$userstring
+	${load_java}
+	date
+	export IBM_JAVA_OPTIONS="-Xmx4000m -Xgcthreads1"                                                                    
+	export _JAVA_OPTIONS="-Xmx4000m -Xms4000m" 
+	java -jar ${juiceDir}/scripts/juicer_3.25.21_aggNormAPA.jar apa --ag-norm -k NONE -n 300 -w 100 -r 1000 -q 60 --threads 1 $outputdir/inter_30.hic ${juiceDir}/scripts/GSE63525_GM12878_primary_replicate_HiCCUPS_looplist_with_motifs_unique_localized.txt $outputdir/qc_apa
+	date
+QC`
+fi
+
 jid=`sbatch <<- FINCLN1 | egrep -o -e "\b[0-9]+$"
 	#!/bin/bash -l
 	#SBATCH -p $queue
@@ -1352,7 +1568,14 @@ jid=`sbatch <<- FINCLN1 | egrep -o -e "\b[0-9]+$"
         $userstring			
 
 	date
-	export splitdir=${splitdir}; export outputdir=${outputdir}; ${juiceDir}/scripts/check.sh
+	export splitdir=${splitdir}; export outputdir=${outputdir}; 
+        if ${juiceDir}/scripts/check.sh
+        then
+           if [ "$cleanup" = 1 ]
+           then
+              ${juiceDir}/scripts/cleanup.sh
+           fi
+        fi
 	date
 FINCLN1`
 

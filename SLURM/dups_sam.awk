@@ -54,13 +54,13 @@ function markduplicate(input) {
 # Executed once, before beginning the file read
 BEGIN {
     i=0;
-    if (length(nowobble)==0) {
-	wobble1=4;
-	wobble2=4;
-    }
-    else {
+    if (length(nowobble)>0) {
 	wobble1=0;
 	wobble2=0;
+    }
+    else if (length(wobble1)==0 && length(wobble2)==0) {
+	wobble1=4;
+	wobble2=4;
     }
     OFS="\t";
     pname="";
@@ -246,7 +246,7 @@ END {
 	    if (rname[0] in saved3) print saved3[rname[0]];
 	    if (rname[0] in saved4) print saved4[rname[0]];
 	}
-	print count_dups > fname;
+	#print count_dups > fname;
     }
 }
 
